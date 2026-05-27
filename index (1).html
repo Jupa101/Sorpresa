@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>🎁 Sorpresa</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html, body { width:100%; height:100%; background:#000; font-family:sans-serif; color:#fff; overflow:hidden; }
+
+    /* ── Pantalla de señuelo ── */
+    #lure {
+      position:fixed; inset:0; background:#111;
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      z-index:9999; gap:1.2rem; padding:2rem; text-align:center;
+    }
+    #lure .emoji { font-size:4rem; animation:pop .6s infinite alternate; }
+    @keyframes pop { to { transform:scale(1.2); } }
+    #lure h1 { font-size:1.6rem; font-weight:700; }
+    #lure p  { color:#aaa; font-size:1rem; }
+    #start-btn {
+      padding:1rem 2.8rem; font-size:1.15rem;
+      background:#e00; color:#fff; border:none;
+      border-radius:999px; cursor:pointer;
+      animation:pop .6s infinite alternate;
+    }
+
+    /* ── Reproductor principal ── */
+    #player-wrap {
+      display:none; position:fixed; inset:0; background:#000; z-index:100;
+    }
+    #player-wrap video {
+      width:100%; height:100%; object-fit:cover;
+      background:#000;
+    }
+
+    /* Capa encima del video — bloquea pausa/controles */
+    #shield {
+      position:fixed; inset:0; z-index:200; background:transparent;
+    }
+
+    /* ── HUD inferior ── */
+    #hud {
+      display:none; position:fixed; bottom:0; left:0; right:0;
+      z-index:300; background:rgba(0,0,0,.88);
+      padding:8px 16px 14px; flex-direction:column; align-items:center; gap:6px;
+    }
+    #hud-text { font-size:13px; color:#ddd; }
+    #pbar  { width:100%; height:7px; background:#333; border-radius:999px; overflow:hidden; }
+    #pfill { height:100%; background:#e00; width:100%; transition:width 1s linear; }
+
+    /* Indicador de video actual */
+    #vid-label {
+      position:fixed; top:12px; left:0; right:0; text-align:center;
+      z-index:300; font-size:11px; color:rgba(255,255,255,.5); letter-spacing:.05em;
+    }
+
+    /* ── Botón de salida ── */
+    #exit-btn {
+      display:none; position:fixed; top:50%; left:50%;
+      transform:translate(-50%,-50%); z-index:9999;
+      padding:1.2rem 2.8rem; background:#fff; color:#000;
+      font-size:1.1rem; font-weight:700; border:none;
+      border-radius:999px; cursor:pointer;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Señuelo -->
+<div id="lure">
+  <div class="emoji">🎁</div>
+  <h1>¡Alguien te envió una sorpresa!</h1>
+  <p>Toca para revelarla</p>
+  <button id="start-btn" onclick="startPrank()">ABRIR AHORA 🎉</button>
+</div>
+
+<!-- Reproductor -->
+<div id="player-wrap">
+  <video id="vid" playsinline webkit-playsinline autoplay muted></video>
+</div>
+
+<!-- Escudo anti-pausa -->
+<div id="shield"></div>
+
+<!-- Indicador -->
+<div id="vid-label"></div>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="hud-text">😈 Aguanta...</div>
+  <div id="pbar"><div id="pfill"></div></div>
+</div>
+
+<!-- Botón final -->
+<button id="exit-btn" onclick="finish()">✅ ¡Ya puedes salir!</button>
+
+<script>
+// ── Videos de YouTube como streams HLS no disponibles desde web,
+//    usamos la API de YouTube iframe pero con playlist secuencial
+// ── Mejor opción cross-platform: un YT iframe que cambia de video cada N seg
+
+const VIDEO_IDS = [
+  'dQw4w9WgXcQ',  // Rick Astley
+  'hY7m5jjJ9mM',  // Dramatic Chipmunk
+  'rHu8cZvSBQo',  // Nyan Cat
+  'aBr2kKAHN6M',  // Keyboard Cat
+  'lXMskKTw3Bc',  // Double Rainbow
+];
+
+const TOTAL_SEC   = 60;
+const PER_VIDEO   = Math.ceil(TOTAL_SEC / VIDEO_IDS.length); // ~12s por video
+
+let remaining   = TOTAL_SEC;
+let vidIndex    = 0;
+let prankActive = false;
+let timerIv     = null;
+let vidIv       = null;
+
+// ── Contenedor iframe (más compatible que <video> para YT) ──
+let iframeEl = null;
+
+function buildIframe(videoId) {
+  if (iframeEl) iframeEl.remove();
+  iframeEl = document.createElement('iframe');
+  iframeEl.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture');
+  iframeEl.setAttribute('allowfullscreen', '');
+  iframeEl.setAttribute('playsinline', '');
+  iframeEl.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:none;z-index:150;';
+  iframeEl.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0&controls=0&loop=0&rel=0&modestbranding=1&playsinline=1&enablejsapi=0`;
+  document.getElementById('player-wrap').appendChild(iframeEl);
+}
+
+function updateLabel() {
+  document.getElementById('vid-label').textContent =
+    `Video ${vidIndex + 1} de ${VIDEO_IDS.length}`;
+}
+
+function nextVideo() {
+  if (!prankActive) return;
+  vidIndex = (vidIndex + 1) % VIDEO_IDS.length;
+  buildIframe(VIDEO_IDS[vidIndex]);
+  updateLabel();
+}
+
+function startPrank() {
+  prankActive = true;
+  document.getElementById('lure').style.display = 'none';
+  document.getElementById('player-wrap').style.display = 'block';
+  document.getElementById('hud').style.display = 'flex';
+  document.getElementById('shield').style.display = 'block';
+
+  // Primer video
+  buildIframe(VIDEO_IDS[0]);
+  updateLabel();
+
+  // Rotar video cada PER_VIDEO segundos
+  vidIv = setInterval(nextVideo, PER_VIDEO * 1000);
+
+  // Fullscreen (funciona en Android; iOS lo ignora silenciosamente)
+  const el = document.documentElement;
+  const rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
+  if (rfs) rfs.call(el).catch(() => {});
+
+  // Re-entrar a fullscreen si se escapa
+  ['fullscreenchange','webkitfullscreenchange'].forEach(ev => {
+    document.addEventListener(ev, () => {
+      if (prankActive && !document.fullscreenElement && !document.webkitFullscreenElement) {
+        setTimeout(() => { if (rfs) rfs.call(el).catch(() => {}); }, 400);
+      }
+    });
+  });
+
+  // Bloquear botón atrás: llenar el historial
+  for (let i = 0; i < 80; i++) history.pushState(null, '', location.href);
+  window.addEventListener('popstate', () => {
+    if (prankActive) for (let i = 0; i < 15; i++) history.pushState(null, '', location.href);
+  });
+
+  // Bloquear swipe-to-close en iOS y scroll
+  document.addEventListener('touchmove', e => { if (prankActive) e.preventDefault(); }, { passive: false });
+  document.addEventListener('contextmenu', e => { if (prankActive) e.preventDefault(); });
+
+  startTimer();
+}
+
+function startTimer() {
+  const fill = document.getElementById('pfill');
+  const text = document.getElementById('hud-text');
+
+  // Animar barra vaciándose
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    fill.style.transition = `width ${TOTAL_SEC}s linear`;
+    fill.style.width = '0%';
+  }));
+
+  timerIv = setInterval(() => {
+    remaining--;
+    if (remaining > 0) {
+      text.textContent = `😈 Aguanta ${remaining} segundo${remaining !== 1 ? 's' : ''}...`;
+    } else {
+      clearInterval(timerIv);
+      clearInterval(vidIv);
+      prankActive = false;
+      text.textContent = '🎉 ¡Lo lograste!';
+      // Salir de fullscreen
+      const efs = document.exitFullscreen || document.webkitExitFullscreen;
+      if (efs) efs.call(document).catch(() => {});
+      document.getElementById('exit-btn').style.display = 'block';
+    }
+  }, 1000);
+}
+
+function finish() {
+  document.getElementById('exit-btn').style.display = 'none';
+  document.getElementById('player-wrap').style.display = 'none';
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('shield').style.display = 'none';
+  document.getElementById('vid-label').style.display = 'none';
+  if (iframeEl) iframeEl.remove();
+  // Redirigir a Google para que no pueda "deshacer"
+  setTimeout(() => { location.replace('https://www.google.com'); }, 500);
+}
+</script>
+</body>
+</html>

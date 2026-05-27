@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>🎁 Sorpresa</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; color: #fff; }
+
+    #lure {
+      position: fixed; inset: 0; background: #111;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 9999; gap: 1rem; padding: 2rem; text-align: center;
+    }
+    #lure .emoji { font-size: 4rem; animation: pulse 0.6s infinite alternate; }
+    @keyframes pulse { to { transform: scale(1.2); } }
+    #lure h1 { font-size: 1.6rem; }
+    #lure p { color: #aaa; font-size: 1rem; }
+    #lure button {
+      margin-top: 1rem; padding: 1rem 2.5rem;
+      font-size: 1.1rem; background: #e00; color: #fff;
+      border: none; border-radius: 999px; cursor: pointer;
+      animation: pulse 0.6s infinite alternate;
+    }
+
+    #arena { display: none; position: fixed; inset: 0; background: #000; }
+
+    .vw {
+      position: absolute; overflow: hidden;
+      border: 2px solid #e00;
+    }
+    .vw iframe { width: 100%; height: 100%; border: none; pointer-events: none; }
+
+    /* Capa invisible encima de todo que atrapa todos los toques */
+    #trap {
+      display: none; position: fixed; inset: 0; z-index: 500;
+      background: transparent;
+    }
+
+    #hud {
+      display: none; position: fixed; bottom: 0; left: 0; right: 0;
+      z-index: 600; background: rgba(0,0,0,0.9);
+      padding: 8px 16px 12px; flex-direction: column; align-items: center; gap: 5px;
+    }
+    #hud-text { font-size: 13px; color: #ccc; }
+    #pbar { width: 100%; height: 6px; background: #333; border-radius: 999px; overflow: hidden; }
+    #pfill { height: 100%; background: #e00; width: 100%; transition: width 1s linear; }
+
+    #exit-btn {
+      display: none; position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%,-50%); z-index: 9999;
+      padding: 1.2rem 2.5rem; background: #fff; color: #000;
+      font-size: 1.2rem; font-weight: 700; border: none;
+      border-radius: 999px; cursor: pointer; text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<div id="lure">
+  <div class="emoji">🎁</div>
+  <h1>¡Te enviaron una sorpresa!</h1>
+  <p>Toca para revelarla</p>
+  <button onclick="startPrank()">ABRIR 🎉</button>
+</div>
+
+<div id="arena"></div>
+<div id="trap"></div>
+
+<div id="hud">
+  <div id="hud-text">😈 Aguanta...</div>
+  <div id="pbar"><div id="pfill"></div></div>
+</div>
+
+<button id="exit-btn" onclick="document.getElementById('exit-btn').style.display='none'; document.getElementById('arena').style.display='none';">✅ ¡Listo, ya puedes salir!</button>
+
+<script>
+const IDS = [
+  'dQw4w9WgXcQ',
+  'hY7m5jjJ9mM',
+  'rHu8cZvSBQo',
+  'aBr2kKAHN6M',
+  'lXMskKTw3Bc',
+];
+
+const TOTAL = 60;
+let remaining = TOTAL;
+let prankActive = false;
+
+function startPrank() {
+  prankActive = true;
+  document.getElementById('lure').style.display = 'none';
+
+  // Pedir pantalla completa
+  const el = document.documentElement;
+  const rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+  if (rfs) rfs.call(el);
+
+  buildVideos();
+  document.getElementById('arena').style.display = 'block';
+  document.getElementById('trap').style.display = 'block';
+  document.getElementById('hud').style.display = 'flex';
+
+  // Empujar historial repetidamente para que el botón atrás
+  // nunca pueda salir de la página
+  for (let i = 0; i < 60; i++) history.pushState(null, '', location.href);
+
+  window.addEventListener('popstate', () => {
+    if (prankActive) {
+      for (let i = 0; i < 10; i++) history.pushState(null, '', location.href);
+    }
+  });
+
+  // Si pierde el foco (intenta cambiar app) volver a fullscreen
+  document.addEventListener('visibilitychange', () => {
+    if (prankActive && document.hidden === false) {
+      if (rfs) rfs.call(el);
+    }
+  });
+
+  // Si sale de fullscreen, volver a meterlo
+  document.addEventListener('fullscreenchange', reFullscreen);
+  document.addEventListener('webkitfullscreenchange', reFullscreen);
+
+  startTimer();
+}
+
+function reFullscreen() {
+  if (prankActive) {
+    const el = document.documentElement;
+    const rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
+    if (rfs && !document.fullscreenElement && !document.webkitFullscreenElement) {
+      setTimeout(() => rfs.call(el), 300);
+    }
+  }
+}
+
+function buildVideos() {
+  const arena = document.getElementById('arena');
+  // Layout 2-2-1
+  const pos = [
+    { left:'0%',   top:'0%',   w:'50%', h:'34%' },
+    { left:'50%',  top:'0%',   w:'50%', h:'34%' },
+    { left:'0%',   top:'33%',  w:'50%', h:'34%' },
+    { left:'50%',  top:'33%',  w:'50%', h:'34%' },
+    { left:'12.5%',top:'66%',  w:'75%', h:'34%' },
+  ];
+  IDS.forEach((id, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'vw';
+    wrap.style.left   = pos[i].left;
+    wrap.style.top    = pos[i].top;
+    wrap.style.width  = pos[i].w;
+    wrap.style.height = pos[i].h;
+    wrap.innerHTML = `<iframe
+      src="https://www.youtube.com/embed/${id}?autoplay=1&mute=0&controls=0&loop=1&playlist=${id}&rel=0&modestbranding=1&playsinline=1"
+      allow="autoplay; fullscreen; picture-in-picture"
+      allowfullscreen playsinline></iframe>`;
+    arena.appendChild(wrap);
+  });
+}
+
+function startTimer() {
+  const fill  = document.getElementById('pfill');
+  const text  = document.getElementById('hud-text');
+
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    fill.style.width = '0%';
+  }));
+
+  const iv = setInterval(() => {
+    remaining--;
+    if (remaining > 0) {
+      text.textContent = `😈 Aguanta ${remaining} segundo${remaining !== 1 ? 's' : ''}...`;
+    } else {
+      clearInterval(iv);
+      prankActive = false;
+      text.textContent = '🎉 ¡Sobreviviste!';
+      // Salir de fullscreen
+      const efs = document.exitFullscreen || document.webkitExitFullscreen;
+      if (efs) efs.call(document);
+      document.getElementById('exit-btn').style.display = 'block';
+    }
+  }, 1000);
+}
+
+// Bloquear gestos de cierre: swipe hacia abajo en iOS y gestos Android
+document.addEventListener('touchmove', e => { if (prankActive) e.preventDefault(); }, { passive: false });
+document.addEventListener('contextmenu', e => { if (prankActive) e.preventDefault(); });
+document.addEventListener('keydown', e => {
+  if (prankActive) e.preventDefault();
+});
+</script>
+</body>
+</html>
